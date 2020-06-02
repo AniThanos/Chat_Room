@@ -18,10 +18,11 @@ app.use(express.static(publicDirectoryPath));
 io.on('connection', (socket) => {
   socket.on('messageSend', (message, callback) => {
     const filter = new Filter();
+    const user = getUser(socket.id);
     if (filter.isProfane(message)) {
       return callback('Not Allowed');
     }
-    io.emit('message', generateMessage(message));
+    io.to(user.room).emit('message', generateMessage(user.username, message));
     callback();
   });
 
@@ -31,20 +32,30 @@ io.on('connection', (socket) => {
      return callback(error);
     }
     socket.join(user.room);
-    socket.emit('message', generateMessage('Welcome'));
+    socket.emit('message', generateMessage('Admin', 'Welcome'));
     socket.broadcast.to(user.room).emit('message', generateMessage(`${user.username} has joined`));// send message to all except the one who has joined
+
+    io.to(user.room).emit('roomData', {
+      room: user.room,
+      users: getUsersInRoom(user.room)
+    });
     callback();
   });
 
   socket.on('SendLocation', (location, callback)=>{
-    io.emit('locationMessage', generateLocationMessage(`https://google.com/maps?q=${location.latitude},${location.longitute}`));
+    const user = getUser(socket.id);
+    io.to(user.room).emit('locationMessage', generateLocationMessage(user.username, `https://google.com/maps?q=${location.latitude},${location.longitute}`));
     callback();
   });
 
   socket.on('disconnect', ()=>{
     const user = removeUser(socket.id);
     if (user) {
-      io.to(user.room).emit('message', generateMessage(`${user.username} has left`));
+      io.to(user.room).emit('message', generateMessage('Admin', `${user.username} has left`));
+      io.to(user.room).emit('roomData', {
+        room: user.room,
+        users: getUsersInRoom(user.room)
+      });
     }
   });
 });
